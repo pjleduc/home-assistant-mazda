@@ -4,12 +4,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import re
 import secrets
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -18,7 +18,6 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client
 
 from .const import (
-    AUTH_METHOD_CREDENTIALS,
     AUTH_METHOD_OAUTH2,
     CONF_ACCESS_TOKEN,
     CONF_AUTH_METHOD,
@@ -33,11 +32,6 @@ from .const import (
     get_authorize_url,
     get_token_url,
     is_oauth2_supported,
-)
-from .pymazda.client import Client as MazdaAPI
-from .pymazda.exceptions import (
-    MazdaAccountLockedException,
-    MazdaAuthenticationException,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,8 +70,12 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            self._region = user_input[CONF_REGION]
-            return await self.async_step_credentials()
+            region = user_input[CONF_REGION]
+            if not is_oauth2_supported(region):
+                errors["base"] = "oauth2_not_supported"
+            else:
+                self._region = region
+                return await self.async_step_credentials()
 
         return self.async_show_form(
             step_id="user",
@@ -94,57 +92,28 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle email/password login step."""
+        """Handle email/password login — performs OAuth2 headlessly."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip()
             password = user_input[CONF_PASSWORD]
 
-            websession = aiohttp_client.async_get_clientsession(self.hass)
             try:
-                client = MazdaAPI.from_credentials(
-                    email=email,
-                    password=password,
-                    region=self._region,
-                    websession=websession,
-                )
-                await client.validate_credentials()
-            except MazdaAuthenticationException:
-                errors["base"] = "invalid_auth"
-            except MazdaAccountLockedException:
-                errors["base"] = "account_locked"
+                token_data = await self._headless_oauth2_login(email, password)
+            except MazdaHeadlessAuthError as ex:
+                _LOGGER.error("Headless OAuth2 login failed: %s", ex)
+                if "invalid" in str(ex).lower() or "password" in str(ex).lower():
+                    errors["base"] = "invalid_auth"
+                elif "locked" in str(ex).lower():
+                    errors["base"] = "account_locked"
+                else:
+                    errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected error during credential login")
+                _LOGGER.exception("Unexpected error during headless OAuth2 login")
                 errors["base"] = "cannot_connect"
             else:
-                # Use email as unique ID
-                unique_id = hashlib.sha256(email.lower().encode()).hexdigest()[:16]
-                await self.async_set_unique_id(unique_id)
-
-                entry_data = {
-                    CONF_REGION: self._region,
-                    CONF_AUTH_METHOD: AUTH_METHOD_CREDENTIALS,
-                    CONF_EMAIL: email,
-                    CONF_PASSWORD: password,
-                }
-
-                if self._reauth_entry:
-                    self.hass.config_entries.async_update_entry(
-                        self._reauth_entry, data=entry_data, unique_id=unique_id
-                    )
-                    self.hass.async_create_task(
-                        self.hass.config_entries.async_reload(
-                            self._reauth_entry.entry_id
-                        )
-                    )
-                    return self.async_abort(reason="reauth_successful")
-
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Mazda ({MAZDA_REGIONS.get(self._region, self._region)})",
-                    data=entry_data,
-                )
+                return await self._async_finish_setup(token_data, email, password)
 
         return self.async_show_form(
             step_id="credentials",
@@ -157,40 +126,17 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_authorize(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the OAuth2 authorization step.
+    async def _headless_oauth2_login(
+        self, email: str, password: str
+    ) -> dict[str, Any]:
+        """Perform OAuth2 login programmatically via Azure AD B2C.
 
-        Shows the user a login URL to visit, then asks them to paste
-        the redirect URL containing the authorization code.
+        Simulates what the MyMazda app does internally:
+        1. Load the authorize page to get CSRF token and transaction ID
+        2. POST credentials to the SelfAsserted endpoint
+        3. Follow the confirmed endpoint to get the auth code
+        4. Exchange the auth code for tokens
         """
-        errors: dict[str, str] = {}
-
-        if not is_oauth2_supported(self._region):
-            errors["base"] = "oauth2_not_supported"
-            return await self.async_step_credentials()
-
-        if user_input is not None:
-            redirect_url = user_input.get(CONF_REDIRECT_URL, "").strip()
-            if not redirect_url:
-                errors["base"] = "missing_redirect_url"
-            else:
-                # Extract auth code from redirect URL
-                code = self._extract_code_from_url(redirect_url)
-                if code is None:
-                    errors["base"] = "invalid_redirect_url"
-                else:
-                    # Exchange code for tokens
-                    try:
-                        token_data = await self._exchange_code_for_tokens(code)
-                    except Exception:
-                        _LOGGER.exception("Token exchange failed")
-                        errors["base"] = "token_exchange_failed"
-                    else:
-                        return await self._async_finish_oauth_setup(token_data)
-
-        # Generate PKCE pair and state for this attempt
         self._code_verifier, code_challenge = _generate_pkce_pair()
         self._state = secrets.token_urlsafe(32)
 
@@ -208,31 +154,127 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         authorize_url = f"{authorize_base}?{urlencode(params)}"
 
-        _LOGGER.warning(
-            "Mazda OAuth2: Open this URL in your browser to log in: %s",
-            authorize_url,
+        websession = aiohttp_client.async_get_clientsession(self.hass)
+
+        # Step 1: Load the authorize page to extract CSRF and transId
+        _LOGGER.debug("Headless OAuth2: loading authorize page")
+        resp = await websession.get(authorize_url, allow_redirects=True)
+        page_html = await resp.text()
+
+        csrf_token = self._extract_setting(page_html, "csrf")
+        trans_id = self._extract_setting(page_html, "transId")
+
+        if not csrf_token or not trans_id:
+            raise MazdaHeadlessAuthError(
+                "Could not extract CSRF token or transaction ID from login page"
+            )
+
+        # Build base URL for API calls
+        config = OAUTH2_REGION_CONFIG[self._region]
+        tenant_path = f"/{config['tenant_id']}/{config['policy']}"
+        base_url = config["auth_base_url"]
+
+        # Step 2: POST credentials to SelfAsserted
+        _LOGGER.debug("Headless OAuth2: submitting credentials")
+        self_asserted_url = (
+            f"{base_url}{tenant_path}/SelfAsserted"
+            f"?tx={trans_id}&p={config['policy']}"
         )
 
-        return self.async_show_form(
-            step_id="authorize",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_REDIRECT_URL): str,
-                }
-            ),
-            description_placeholders={"authorize_url": authorize_url},
-            errors=errors,
+        form_data = {
+            "request_type": "RESPONSE",
+            "signInName": email,
+            "password": password,
+        }
+
+        headers = {
+            "X-CSRF-TOKEN": csrf_token,
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        # Copy cookies from the authorize page response
+        resp2 = await websession.post(
+            self_asserted_url,
+            data=form_data,
+            headers=headers,
+            allow_redirects=False,
         )
+
+        resp2_text = await resp2.text()
+        _LOGGER.debug(
+            "Headless OAuth2: SelfAsserted response status=%s", resp2.status
+        )
+
+        # Check for error in response
+        if resp2.status != 200:
+            raise MazdaHeadlessAuthError(
+                f"SelfAsserted returned status {resp2.status}: {resp2_text[:200]}"
+            )
+
+        # Azure AD B2C returns JSON with status for AJAX calls
+        if '"status":"400"' in resp2_text or '"status":"409"' in resp2_text:
+            # Extract error message if available
+            error_msg = "Invalid email or password"
+            msg_match = re.search(r'"message"\s*:\s*"([^"]+)"', resp2_text)
+            if msg_match:
+                error_msg = msg_match.group(1)
+            raise MazdaHeadlessAuthError(error_msg)
+
+        # Step 3: GET the confirmed endpoint to get the auth code redirect
+        _LOGGER.debug("Headless OAuth2: requesting confirmed endpoint")
+        confirmed_url = (
+            f"{base_url}{tenant_path}/api/CombinedSigninAndSignup/confirmed"
+            f"?csrf_token={csrf_token}&tx={trans_id}&p={config['policy']}"
+        )
+
+        resp3 = await websession.get(
+            confirmed_url,
+            allow_redirects=False,
+        )
+
+        _LOGGER.debug(
+            "Headless OAuth2: confirmed response status=%s", resp3.status
+        )
+
+        # The response should be a 302 redirect to the redirect_uri with the code
+        if resp3.status not in (302, 303):
+            resp3_text = await resp3.text()
+            raise MazdaHeadlessAuthError(
+                f"Expected redirect from confirmed endpoint, got status {resp3.status}: {resp3_text[:200]}"
+            )
+
+        redirect_location = resp3.headers.get("Location", "")
+        _LOGGER.debug(
+            "Headless OAuth2: redirect location=%s", redirect_location[:100]
+        )
+
+        code = self._extract_code_from_url(redirect_location)
+        if code is None:
+            raise MazdaHeadlessAuthError(
+                f"Could not extract auth code from redirect: {redirect_location[:200]}"
+            )
+
+        # Step 4: Exchange code for tokens
+        _LOGGER.debug("Headless OAuth2: exchanging code for tokens")
+        return await self._exchange_code_for_tokens(code)
+
+    @staticmethod
+    def _extract_setting(html: str, key: str) -> str | None:
+        """Extract a value from the SETTINGS JavaScript object in the page."""
+        # Match patterns like "csrf":"value" or "transId":"value"
+        pattern = rf'"{key}"\s*:\s*"([^"]+)"'
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+        return None
 
     def _extract_code_from_url(self, url: str) -> str | None:
         """Extract the authorization code from a redirect URL."""
         try:
             parsed = urlparse(url)
-            # The redirect URL uses a custom scheme: msauth://...?code=XXX&state=YYY
-            # Parse query params from the query string or fragment
             query_params = parse_qs(parsed.query)
             if not query_params:
-                # Some browsers put params in the fragment
                 query_params = parse_qs(parsed.fragment)
 
             code_list = query_params.get("code")
@@ -266,14 +308,14 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             error = resp_json.get("error", "unknown")
             error_desc = resp_json.get("error_description", "")
             _LOGGER.error("Token exchange failed: %s - %s", error, error_desc)
-            raise Exception(f"Token exchange failed: {error}")
+            raise MazdaHeadlessAuthError(f"Token exchange failed: {error}")
 
         return resp_json
 
-    async def _async_finish_oauth_setup(
-        self, token_data: dict[str, Any]
+    async def _async_finish_setup(
+        self, token_data: dict[str, Any], email: str, password: str
     ) -> FlowResult:
-        """Create or update the config entry with OAuth tokens."""
+        """Create or update the config entry with OAuth tokens and credentials."""
         access_token = token_data["access_token"]
         refresh_token = token_data.get("refresh_token", "")
         expires_in = token_data.get("expires_in", 3600)
@@ -284,14 +326,15 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             token_data.get("id_token", "")
         )
         if unique_id is None:
-            # Fallback: use a hash of the access token
-            unique_id = hashlib.sha256(access_token.encode()).hexdigest()[:16]
+            unique_id = hashlib.sha256(email.lower().encode()).hexdigest()[:16]
 
         await self.async_set_unique_id(unique_id)
 
         entry_data = {
             CONF_REGION: self._region,
             CONF_AUTH_METHOD: AUTH_METHOD_OAUTH2,
+            CONF_EMAIL: email,
+            CONF_PASSWORD: password,
             CONF_ACCESS_TOKEN: access_token,
             CONF_REFRESH_TOKEN: refresh_token,
             CONF_EXPIRES_AT: expires_at,
@@ -317,11 +360,9 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not id_token:
             return None
         try:
-            # JWT has 3 parts separated by dots; payload is the second part
             parts = id_token.split(".")
             if len(parts) < 2:
                 return None
-            # Add padding
             payload_b64 = parts[1]
             padding = 4 - len(payload_b64) % 4
             if padding != 4:
@@ -341,4 +382,8 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.context["entry_id"]
         )
         self._region = entry_data.get(CONF_REGION)
-        return await self.async_step_user()
+        return await self.async_step_credentials()
+
+
+class MazdaHeadlessAuthError(Exception):
+    """Error during headless OAuth2 authentication."""

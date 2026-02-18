@@ -11,10 +11,9 @@ MAZDA_REGIONS = {"MNAO": "North America", "MME": "Europe", "MJO": "Japan"}
 
 # Authentication method
 CONF_AUTH_METHOD = "auth_method"
-AUTH_METHOD_CREDENTIALS = "credentials"
 AUTH_METHOD_OAUTH2 = "oauth2"
 
-# Credential-based auth constants
+# Credential constants (stored for headless OAuth2 re-login)
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 

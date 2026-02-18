@@ -29,13 +29,8 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
-    AUTH_METHOD_CREDENTIALS,
-    AUTH_METHOD_OAUTH2,
     CONF_ACCESS_TOKEN,
-    CONF_AUTH_METHOD,
-    CONF_EMAIL,
     CONF_EXPIRES_AT,
-    CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     DATA_CLIENT,
     DATA_COORDINATOR,
@@ -93,54 +88,38 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Mazda Connected Services from a config entry."""
     region = entry.data[CONF_REGION]
-    auth_method = entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_OAUTH2)
+    access_token = entry.data.get(CONF_ACCESS_TOKEN)
+    refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
+    expires_at = entry.data.get(CONF_EXPIRES_AT)
+
+    if not access_token or not refresh_token:
+        raise ConfigEntryAuthFailed(
+            "OAuth2 tokens missing — please re-authenticate"
+        )
+
     websession = aiohttp_client.async_get_clientsession(hass)
 
-    if auth_method == AUTH_METHOD_CREDENTIALS:
-        email = entry.data.get(CONF_EMAIL)
-        password = entry.data.get(CONF_PASSWORD)
-        if not email or not password:
-            raise ConfigEntryAuthFailed(
-                "Credentials missing — please re-authenticate"
-            )
-        mazda_client = MazdaAPI.from_credentials(
-            email=email,
-            password=password,
-            region=region,
-            websession=websession,
-            use_cached_vehicle_list=True,
+    def token_update_callback(new_access_token, new_refresh_token, new_expires_at):
+        """Persist refreshed tokens back to the config entry."""
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_ACCESS_TOKEN: new_access_token,
+                CONF_REFRESH_TOKEN: new_refresh_token,
+                CONF_EXPIRES_AT: new_expires_at,
+            },
         )
-    else:
-        access_token = entry.data.get(CONF_ACCESS_TOKEN)
-        refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
-        expires_at = entry.data.get(CONF_EXPIRES_AT)
 
-        if not access_token or not refresh_token:
-            raise ConfigEntryAuthFailed(
-                "OAuth2 tokens missing — please re-authenticate"
-            )
-
-        def token_update_callback(new_access_token, new_refresh_token, new_expires_at):
-            """Persist refreshed tokens back to the config entry."""
-            hass.config_entries.async_update_entry(
-                entry,
-                data={
-                    **entry.data,
-                    CONF_ACCESS_TOKEN: new_access_token,
-                    CONF_REFRESH_TOKEN: new_refresh_token,
-                    CONF_EXPIRES_AT: new_expires_at,
-                },
-            )
-
-        mazda_client = MazdaAPI.from_oauth_tokens(
-            region=region,
-            websession=websession,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
-            token_update_callback=token_update_callback,
-            use_cached_vehicle_list=True,
-        )
+    mazda_client = MazdaAPI.from_oauth_tokens(
+        region=region,
+        websession=websession,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_at=expires_at,
+        token_update_callback=token_update_callback,
+        use_cached_vehicle_list=True,
+    )
 
     try:
         await mazda_client.validate_credentials()
