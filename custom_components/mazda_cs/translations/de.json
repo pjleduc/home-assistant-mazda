@@ -23,7 +23,7 @@
                 "data": {
                     "redirect_url": "Weiterleitungs-URL"
                 },
-                "description": "1. Klicke auf den folgenden Link, um die Mazda-Anmeldeseite zu öffnen:\n\n[Bei Mazda anmelden]({authorize_url})\n\n2. Melde dich mit deinen MyMazda-Zugangsdaten an.\n3. Nach der Anmeldung versucht der Browser zu einer URL mit `msauth://` weiterzuleiten — die Seite zeigt möglicherweise einen Fehler an.\n4. Kopiere die **vollständige URL** aus der Adresszeile deines Browsers und füge sie unten ein."
+                "description": "1. Kopiere diese URL und öffne sie in deinem Browser:\n\n{authorize_url}\n\n2. Melde dich mit deinen MyMazda-Zugangsdaten an.\n3. Nach der Anmeldung versucht der Browser zu einer URL mit msauth:// weiterzuleiten — die Seite zeigt möglicherweise einen Fehler an. Das ist normal.\n4. Kopiere die vollständige URL aus der Adresszeile deines Browsers und füge sie unten ein.\n\nHinweis: Falls die URL oben nicht sichtbar ist, überprüfe die Home Assistant Logs für den Anmelde-Link."
             }
         }
     },

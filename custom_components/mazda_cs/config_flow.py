@@ -132,6 +132,11 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         authorize_url = f"{authorize_base}?{urlencode(params)}"
 
+        _LOGGER.warning(
+            "Mazda OAuth2: Open this URL in your browser to log in: %s",
+            authorize_url,
+        )
+
         return self.async_show_form(
             step_id="authorize",
             data_schema=vol.Schema(
