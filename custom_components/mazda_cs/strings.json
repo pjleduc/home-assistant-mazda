@@ -23,7 +23,7 @@
         "data": {
           "redirect_url": "Redirect URL"
         },
-        "description": "1. Copy this URL and open it in your browser:\n\n{authorize_url}\n\n2. Log in with your MyMazda credentials.\n3. After login, your browser will redirect to a URL starting with msauth:// — the page may show an error. That is expected.\n4. Copy the full URL from your browser address bar and paste it below.\n\nNote: If the URL above is not visible, check your Home Assistant logs for the login link."
+        "description": "1. Copy this URL and open it in your browser:\n\n{authorize_url}\n\n2. Log in with your MyMazda credentials.\n3. After login, your browser will redirect to a URL starting with msauth:// — the page may show an error. That is expected.\n4. Copy the full URL from your browser address bar and paste it below.\n\nIf the URL above is not visible, check your Home Assistant logs for the login link."
       }
     }
   },
