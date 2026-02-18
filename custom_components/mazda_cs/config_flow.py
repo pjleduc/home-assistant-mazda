@@ -18,8 +18,13 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client
 
 from .const import (
+    AUTH_METHOD_CREDENTIALS,
+    AUTH_METHOD_OAUTH2,
     CONF_ACCESS_TOKEN,
+    CONF_AUTH_METHOD,
+    CONF_EMAIL,
     CONF_EXPIRES_AT,
+    CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     DOMAIN,
     MAZDA_REGIONS,
@@ -28,6 +33,11 @@ from .const import (
     get_authorize_url,
     get_token_url,
     is_oauth2_supported,
+)
+from .pymazda.client import Client as MazdaAPI
+from .pymazda.exceptions import (
+    MazdaAccountLockedException,
+    MazdaAuthenticationException,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,20 +76,82 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            region = user_input[CONF_REGION]
-            if not is_oauth2_supported(region):
-                errors["base"] = "oauth2_not_supported"
-            else:
-                self._region = region
-                return await self.async_step_authorize()
+            self._region = user_input[CONF_REGION]
+            return await self.async_step_credentials()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_REGION, default=self._region
+                        CONF_REGION, default=self._region or "MNAO"
                     ): vol.In(MAZDA_REGIONS),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle email/password login step."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            email = user_input[CONF_EMAIL].strip()
+            password = user_input[CONF_PASSWORD]
+
+            websession = aiohttp_client.async_get_clientsession(self.hass)
+            try:
+                client = MazdaAPI.from_credentials(
+                    email=email,
+                    password=password,
+                    region=self._region,
+                    websession=websession,
+                )
+                await client.validate_credentials()
+            except MazdaAuthenticationException:
+                errors["base"] = "invalid_auth"
+            except MazdaAccountLockedException:
+                errors["base"] = "account_locked"
+            except Exception:
+                _LOGGER.exception("Unexpected error during credential login")
+                errors["base"] = "cannot_connect"
+            else:
+                # Use email as unique ID
+                unique_id = hashlib.sha256(email.lower().encode()).hexdigest()[:16]
+                await self.async_set_unique_id(unique_id)
+
+                entry_data = {
+                    CONF_REGION: self._region,
+                    CONF_AUTH_METHOD: AUTH_METHOD_CREDENTIALS,
+                    CONF_EMAIL: email,
+                    CONF_PASSWORD: password,
+                }
+
+                if self._reauth_entry:
+                    self.hass.config_entries.async_update_entry(
+                        self._reauth_entry, data=entry_data, unique_id=unique_id
+                    )
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(
+                            self._reauth_entry.entry_id
+                        )
+                    )
+                    return self.async_abort(reason="reauth_successful")
+
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=f"Mazda ({MAZDA_REGIONS.get(self._region, self._region)})",
+                    data=entry_data,
+                )
+
+        return self.async_show_form(
+            step_id="credentials",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_EMAIL): str,
+                    vol.Required(CONF_PASSWORD): str,
                 }
             ),
             errors=errors,
@@ -94,6 +166,10 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         the redirect URL containing the authorization code.
         """
         errors: dict[str, str] = {}
+
+        if not is_oauth2_supported(self._region):
+            errors["base"] = "oauth2_not_supported"
+            return await self.async_step_credentials()
 
         if user_input is not None:
             redirect_url = user_input.get(CONF_REDIRECT_URL, "").strip()
@@ -112,7 +188,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         _LOGGER.exception("Token exchange failed")
                         errors["base"] = "token_exchange_failed"
                     else:
-                        return await self._async_finish_setup(token_data)
+                        return await self._async_finish_oauth_setup(token_data)
 
         # Generate PKCE pair and state for this attempt
         self._code_verifier, code_challenge = _generate_pkce_pair()
@@ -194,7 +270,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return resp_json
 
-    async def _async_finish_setup(
+    async def _async_finish_oauth_setup(
         self, token_data: dict[str, Any]
     ) -> FlowResult:
         """Create or update the config entry with OAuth tokens."""
@@ -215,6 +291,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         entry_data = {
             CONF_REGION: self._region,
+            CONF_AUTH_METHOD: AUTH_METHOD_OAUTH2,
             CONF_ACCESS_TOKEN: access_token,
             CONF_REFRESH_TOKEN: refresh_token,
             CONF_EXPIRES_AT: expires_at,

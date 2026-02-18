@@ -5,6 +5,8 @@
             "reauth_successful": "Re-authentication was successful"
         },
         "error": {
+            "invalid_auth": "Invalid email or password",
+            "account_locked": "Your Mazda account is locked. Please try again later or reset your password via the MyMazda app.",
             "oauth2_not_supported": "OAuth2 is not yet configured for this region.",
             "missing_redirect_url": "Please paste the redirect URL from the browser.",
             "invalid_redirect_url": "Could not extract authorization code from the URL. Please make sure you copied the full URL.",
@@ -18,6 +20,13 @@
                     "region": "Region"
                 },
                 "description": "Select your Mazda Connected Services region."
+            },
+            "credentials": {
+                "data": {
+                    "email": "Email",
+                    "password": "Password"
+                },
+                "description": "Enter your MyMazda account credentials."
             },
             "authorize": {
                 "data": {

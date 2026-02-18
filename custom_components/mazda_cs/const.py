@@ -9,6 +9,15 @@ DATA_VEHICLES = "vehicles"
 
 MAZDA_REGIONS = {"MNAO": "North America", "MME": "Europe", "MJO": "Japan"}
 
+# Authentication method
+CONF_AUTH_METHOD = "auth_method"
+AUTH_METHOD_CREDENTIALS = "credentials"
+AUTH_METHOD_OAUTH2 = "oauth2"
+
+# Credential-based auth constants
+CONF_EMAIL = "email"
+CONF_PASSWORD = "password"
+
 # OAuth2 configuration constants
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"

@@ -1,6 +1,7 @@
 import datetime  # noqa: D100
 import json
 
+from .connection import Connection
 from .controller import Controller
 from .exceptions import MazdaConfigException
 from .oauth_connection import OAuthConnection
@@ -13,6 +14,24 @@ class Client:  # noqa: D101
         self._cached_state = {}
         self._use_cached_vehicle_list = use_cached_vehicle_list
         self._cached_vehicle_list = None
+
+    @classmethod
+    def from_credentials(
+        cls,
+        email,
+        password,
+        region,
+        websession=None,
+        use_cached_vehicle_list=False,
+    ):
+        """Create a Client using email/password credentials."""
+        connection = Connection(
+            email=email,
+            password=password,
+            region=region,
+            websession=websession,
+        )
+        return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
 
     @classmethod
     def from_oauth_tokens(
