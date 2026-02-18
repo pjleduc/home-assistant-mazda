@@ -5,19 +5,25 @@
             "reauth_successful": "Re-authentication was successful"
         },
         "error": {
-            "account_locked": "Account locked. Please try again later.",
+            "oauth2_not_supported": "OAuth2 is not yet configured for this region.",
+            "missing_redirect_url": "Please paste the redirect URL from the browser.",
+            "invalid_redirect_url": "Could not extract authorization code from the URL. Please make sure you copied the full URL.",
+            "token_exchange_failed": "Failed to exchange authorization code for tokens. The code may have expired — please try again.",
             "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
-                    "email": "Email",
-                    "password": "Password",
                     "region": "Region"
                 },
-                "description": "Please enter the email address and password you use to log into the MyMazda mobile app."
+                "description": "Select your Mazda Connected Services region."
+            },
+            "authorize": {
+                "data": {
+                    "redirect_url": "Redirect URL"
+                },
+                "description": "1. Click the link below to open the Mazda login page:\n\n[Log in to Mazda]({authorize_url})\n\n2. Log in with your MyMazda credentials.\n3. After login, your browser will try to redirect to a URL starting with `msauth://` — the page may show an error.\n4. Copy the **full URL** from your browser's address bar and paste it below."
             }
         }
     },

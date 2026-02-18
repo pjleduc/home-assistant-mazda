@@ -68,3 +68,12 @@ class MazdaRequestInProgressException(Exception):
         """Initialize exception."""
         super().__init__(status)
         self.status = status
+
+
+class MazdaOAuthFailedException(Exception):
+    """Raised when OAuth2 token exchange fails."""
+
+    def __init__(self, status):
+        """Initialize exception."""
+        super().__init__(status)
+        self.status = status
