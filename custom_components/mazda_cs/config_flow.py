@@ -8,7 +8,9 @@ import re
 import secrets
 import time
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
+
+import aiohttp
 
 import voluptuous as vol
 
@@ -154,108 +156,157 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         authorize_url = f"{authorize_base}?{urlencode(params)}"
 
-        websession = aiohttp_client.async_get_clientsession(self.hass)
+        base_url = oauth_config["auth_base_url"]
 
-        # Step 1: Load the authorize page to extract CSRF and transId
-        _LOGGER.debug("Headless OAuth2: loading authorize page")
-        resp = await websession.get(authorize_url, allow_redirects=True)
-        page_html = await resp.text()
-
-        csrf_token = self._extract_setting(page_html, "csrf")
-        trans_id = self._extract_setting(page_html, "transId")
-
-        if not csrf_token or not trans_id:
-            raise MazdaHeadlessAuthError(
-                "Could not extract CSRF token or transaction ID from login page"
-            )
-
-        # Build base URL for API calls
-        config = OAUTH2_REGION_CONFIG[self._region]
-        tenant_path = f"/{config['tenant_id']}/{config['policy']}"
-        base_url = config["auth_base_url"]
-
-        # Step 2: POST credentials to SelfAsserted
-        _LOGGER.debug("Headless OAuth2: submitting credentials")
-        self_asserted_url = (
-            f"{base_url}{tenant_path}/SelfAsserted"
-            f"?tx={trans_id}&p={config['policy']}"
-        )
-
-        form_data = {
-            "request_type": "RESPONSE",
-            "signInName": email,
-            "password": password,
+        # Use an isolated session with its own cookie jar to avoid
+        # interference from HA's shared session cookies
+        cookie_jar = aiohttp.CookieJar(unsafe=True)
+        browser_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Mobile Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
-        headers = {
-            "X-CSRF-TOKEN": csrf_token,
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
+        async with aiohttp.ClientSession(
+            cookie_jar=cookie_jar, headers=browser_headers
+        ) as session:
+            # Step 1: Load the authorize page to extract CSRF and transId
+            _LOGGER.debug("Headless OAuth2: loading authorize page")
+            resp = await session.get(
+                authorize_url,
+                allow_redirects=True,
+                headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+            )
+            page_html = await resp.text()
+            page_url = str(resp.url)
 
-        # Copy cookies from the authorize page response
-        resp2 = await websession.post(
-            self_asserted_url,
-            data=form_data,
-            headers=headers,
-            allow_redirects=False,
-        )
+            csrf_token = self._extract_setting(page_html, "csrf")
+            trans_id = self._extract_setting(page_html, "transId")
 
-        resp2_text = await resp2.text()
-        _LOGGER.debug(
-            "Headless OAuth2: SelfAsserted response status=%s", resp2.status
-        )
+            if not csrf_token or not trans_id:
+                _LOGGER.error(
+                    "Could not extract CSRF/transId from login page (url=%s, length=%d)",
+                    page_url,
+                    len(page_html),
+                )
+                raise MazdaHeadlessAuthError(
+                    "Could not extract CSRF token or transaction ID from login page"
+                )
 
-        # Check for error in response
-        if resp2.status != 200:
-            raise MazdaHeadlessAuthError(
-                f"SelfAsserted returned status {resp2.status}: {resp2_text[:200]}"
+            # Extract the tenant path from the page SETTINGS to get the
+            # correct casing (e.g. B2C_1A_signin vs B2C_1A_SIGNIN)
+            tenant_path = None
+            tenant_match = re.search(
+                r'"hosts"\s*:\s*\{\s*"tenant"\s*:\s*"([^"]+)"', page_html
+            )
+            if tenant_match:
+                tenant_path = tenant_match.group(1)
+            if not tenant_path:
+                tenant_path = f"/{oauth_config['tenant_id']}/{oauth_config['policy']}"
+
+            # Step 2: POST credentials to SelfAsserted
+            _LOGGER.debug("Headless OAuth2: submitting credentials")
+            self_asserted_url = (
+                f"{base_url}{tenant_path}/SelfAsserted"
+                f"?tx={quote(trans_id, safe='')}"
+                f"&p={quote(oauth_config['policy'], safe='')}"
             )
 
-        # Azure AD B2C returns JSON with status for AJAX calls
-        if '"status":"400"' in resp2_text or '"status":"409"' in resp2_text:
-            # Extract error message if available
-            error_msg = "Invalid email or password"
-            msg_match = re.search(r'"message"\s*:\s*"([^"]+)"', resp2_text)
-            if msg_match:
-                error_msg = msg_match.group(1)
-            raise MazdaHeadlessAuthError(error_msg)
+            form_data = {
+                "request_type": "RESPONSE",
+                "signInName": email,
+                "password": password,
+            }
 
-        # Step 3: GET the confirmed endpoint to get the auth code redirect
-        _LOGGER.debug("Headless OAuth2: requesting confirmed endpoint")
-        confirmed_url = (
-            f"{base_url}{tenant_path}/api/CombinedSigninAndSignup/confirmed"
-            f"?csrf_token={csrf_token}&tx={trans_id}&p={config['policy']}"
-        )
+            headers = {
+                "X-CSRF-TOKEN": csrf_token,
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": page_url,
+                "Origin": base_url,
+            }
 
-        resp3 = await websession.get(
-            confirmed_url,
-            allow_redirects=False,
-        )
-
-        _LOGGER.debug(
-            "Headless OAuth2: confirmed response status=%s", resp3.status
-        )
-
-        # The response should be a 302 redirect to the redirect_uri with the code
-        if resp3.status not in (302, 303):
-            resp3_text = await resp3.text()
-            raise MazdaHeadlessAuthError(
-                f"Expected redirect from confirmed endpoint, got status {resp3.status}: {resp3_text[:200]}"
+            resp2 = await session.post(
+                self_asserted_url,
+                data=form_data,
+                headers=headers,
+                allow_redirects=False,
             )
 
-        redirect_location = resp3.headers.get("Location", "")
-        _LOGGER.debug(
-            "Headless OAuth2: redirect location=%s", redirect_location[:100]
-        )
-
-        code = self._extract_code_from_url(redirect_location)
-        if code is None:
-            raise MazdaHeadlessAuthError(
-                f"Could not extract auth code from redirect: {redirect_location[:200]}"
+            resp2_text = await resp2.text()
+            _LOGGER.debug(
+                "Headless OAuth2: SelfAsserted response status=%s body=%s",
+                resp2.status,
+                resp2_text[:500],
             )
 
-        # Step 4: Exchange code for tokens
+            # Check for error in response
+            if resp2.status != 200:
+                raise MazdaHeadlessAuthError(
+                    f"SelfAsserted returned status {resp2.status}: {resp2_text[:200]}"
+                )
+
+            # Azure AD B2C returns JSON with status for AJAX calls
+            if '"status":"400"' in resp2_text or '"status":"409"' in resp2_text:
+                # Extract error message if available
+                error_msg = "Invalid email or password"
+                msg_match = re.search(r'"message"\s*:\s*"([^"]+)"', resp2_text)
+                if msg_match:
+                    error_msg = msg_match.group(1)
+                raise MazdaHeadlessAuthError(error_msg)
+
+            # Step 3: GET the confirmed endpoint to get the auth code redirect
+            _LOGGER.debug("Headless OAuth2: requesting confirmed endpoint")
+            confirmed_url = (
+                f"{base_url}{tenant_path}/api/CombinedSigninAndSignup/confirmed"
+                f"?rememberMe=true"
+                f"&csrf_token={quote(csrf_token, safe='')}"
+                f"&tx={quote(trans_id, safe='')}"
+                f"&p={quote(oauth_config['policy'], safe='')}"
+            )
+
+            resp3 = await session.get(
+                confirmed_url,
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Referer": page_url,
+                },
+                allow_redirects=False,
+            )
+
+            _LOGGER.debug(
+                "Headless OAuth2: confirmed response status=%s", resp3.status
+            )
+
+            # The response should be a 302 redirect to the redirect_uri with the code
+            if resp3.status not in (302, 303):
+                resp3_text = await resp3.text()
+                _LOGGER.error(
+                    "Headless OAuth2: confirmed endpoint did not redirect. "
+                    "status=%s, body=%s",
+                    resp3.status,
+                    resp3_text[:500],
+                )
+                raise MazdaHeadlessAuthError(
+                    f"Expected redirect from confirmed endpoint, got status {resp3.status}: {resp3_text[:200]}"
+                )
+
+            redirect_location = resp3.headers.get("Location", "")
+            _LOGGER.debug(
+                "Headless OAuth2: redirect location=%s", redirect_location[:100]
+            )
+
+            code = self._extract_code_from_url(redirect_location)
+            if code is None:
+                raise MazdaHeadlessAuthError(
+                    f"Could not extract auth code from redirect: {redirect_location[:200]}"
+                )
+
+        # Step 4: Exchange code for tokens (outside isolated session)
         _LOGGER.debug("Headless OAuth2: exchanging code for tokens")
         return await self._exchange_code_for_tokens(code)
 
