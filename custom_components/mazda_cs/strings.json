@@ -19,14 +19,14 @@
         "data": {
           "region": "Region"
         },
-        "description": "Select your Mazda Connected Services region."
+        "description": "[BETA TESTING] Select your Mazda Connected Services region."
       },
       "credentials": {
         "data": {
           "email": "[%key:common::config_flow::data::email%]",
           "password": "[%key:common::config_flow::data::password%]"
         },
-        "description": "Enter your MyMazda account credentials."
+        "description": "[BETA TESTING] Enter your MyMazda account credentials."
       },
       "authorize": {
         "data": {
