@@ -234,9 +234,12 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.warning("Headless OAuth2: tenant_path=%s actual_policy=%s", tenant_path, actual_policy)
 
+            # Extract the API name from the page settings (e.g. CombinedSigninAndSignup)
+            api_name = api_url_match.group(1) if api_url_match else "CombinedSigninAndSignup"
+
             # Step 2: POST credentials to SelfAsserted
             self_asserted_url = (
-                f"{base_url}{tenant_path}/SelfAsserted"
+                f"{base_url}{tenant_path}/api/{api_name}/SelfAsserted"
                 f"?tx={quote(trans_id, safe='')}"
                 f"&p={quote(actual_policy, safe='')}"
             )
@@ -294,7 +297,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Step 3: GET the confirmed endpoint to get the auth code redirect
             _LOGGER.warning("Headless OAuth2: requesting confirmed endpoint")
             confirmed_url = (
-                f"{base_url}{tenant_path}/api/CombinedSigninAndSignup/confirmed"
+                f"{base_url}{tenant_path}/api/{api_name}/confirmed"
                 f"?rememberMe=true"
                 f"&csrf_token={quote(csrf_token, safe='')}"
                 f"&tx={quote(trans_id, safe='')}"
