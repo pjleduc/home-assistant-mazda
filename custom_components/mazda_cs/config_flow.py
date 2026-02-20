@@ -216,13 +216,20 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not tenant_path:
                 tenant_path = f"/{oauth_config['tenant_id']}/{oauth_config['policy']}"
 
-            _LOGGER.warning("Headless OAuth2: tenant_path=%s", tenant_path)
+            # Extract the actual policy name from the tenant_path so the p=
+            # parameter matches the casing used by Azure AD B2C
+            actual_policy = oauth_config["policy"]
+            tenant_parts = tenant_path.strip("/").split("/")
+            if len(tenant_parts) >= 2:
+                actual_policy = tenant_parts[-1]
+
+            _LOGGER.warning("Headless OAuth2: tenant_path=%s actual_policy=%s", tenant_path, actual_policy)
 
             # Step 2: POST credentials to SelfAsserted
             self_asserted_url = (
                 f"{base_url}{tenant_path}/SelfAsserted"
                 f"?tx={quote(trans_id, safe='')}"
-                f"&p={quote(oauth_config['policy'], safe='')}"
+                f"&p={quote(actual_policy, safe='')}"
             )
             _LOGGER.warning("Headless OAuth2: SelfAsserted URL=%s", self_asserted_url)
 
@@ -277,7 +284,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 f"?rememberMe=true"
                 f"&csrf_token={quote(csrf_token, safe='')}"
                 f"&tx={quote(trans_id, safe='')}"
-                f"&p={quote(oauth_config['policy'], safe='')}"
+                f"&p={quote(actual_policy, safe='')}"
             )
 
             resp3 = await session.get(
