@@ -194,6 +194,15 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.warning("Headless OAuth2: csrf=%s transId=%s", csrf_token is not None, trans_id is not None)
 
+            # Dump key SETTINGS values from the page for debugging
+            api_url_match = re.search(r'"api"\s*:\s*"([^"]+)"', page_html)
+            hosts_match = re.search(r'"hosts"\s*:\s*\{[^}]+\}', page_html)
+            _LOGGER.warning(
+                "Headless OAuth2: page api=%s hosts=%s",
+                api_url_match.group(1) if api_url_match else "NOT_FOUND",
+                hosts_match.group(0)[:300] if hosts_match else "NOT_FOUND",
+            )
+
             if not csrf_token or not trans_id:
                 _LOGGER.error(
                     "Could not extract CSRF/transId from login page (url=%s, length=%d, first500=%s)",
@@ -257,9 +266,14 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             resp2_text = await resp2.text()
             _LOGGER.warning(
-                "Headless OAuth2: SelfAsserted response status=%s body=%s",
+                "Headless OAuth2: SelfAsserted response status=%s headers=%s body=%s",
                 resp2.status,
+                dict(resp2.headers),
                 resp2_text[:500],
+            )
+            _LOGGER.warning(
+                "Headless OAuth2: session cookies=%s",
+                {k: v.value for k, v in session.cookie_jar.filter_cookies(self_asserted_url).items()},
             )
 
             # Check for error in response
