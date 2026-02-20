@@ -216,13 +216,15 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not tenant_path:
                 tenant_path = f"/{oauth_config['tenant_id']}/{oauth_config['policy']}"
 
+            _LOGGER.warning("Headless OAuth2: tenant_path=%s", tenant_path)
+
             # Step 2: POST credentials to SelfAsserted
-            _LOGGER.warning("Headless OAuth2: submitting credentials to SelfAsserted")
             self_asserted_url = (
                 f"{base_url}{tenant_path}/SelfAsserted"
                 f"?tx={quote(trans_id, safe='')}"
                 f"&p={quote(oauth_config['policy'], safe='')}"
             )
+            _LOGGER.warning("Headless OAuth2: SelfAsserted URL=%s", self_asserted_url)
 
             form_data = {
                 "request_type": "RESPONSE",
