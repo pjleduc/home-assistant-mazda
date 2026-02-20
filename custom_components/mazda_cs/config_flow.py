@@ -174,23 +174,32 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             cookie_jar=cookie_jar, headers=browser_headers
         ) as session:
             # Step 1: Load the authorize page to extract CSRF and transId
-            _LOGGER.debug("Headless OAuth2: loading authorize page")
-            resp = await session.get(
-                authorize_url,
-                allow_redirects=True,
-                headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-            )
+            _LOGGER.warning("Headless OAuth2: loading authorize page: %s", authorize_url)
+            try:
+                resp = await session.get(
+                    authorize_url,
+                    allow_redirects=True,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                    headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+                )
+            except Exception as ex:
+                _LOGGER.error("Headless OAuth2: failed to load authorize page: %s", ex)
+                raise MazdaHeadlessAuthError(f"Failed to load authorize page: {ex}") from ex
             page_html = await resp.text()
             page_url = str(resp.url)
+            _LOGGER.warning("Headless OAuth2: authorize page status=%s url=%s length=%d", resp.status, page_url, len(page_html))
 
             csrf_token = self._extract_setting(page_html, "csrf")
             trans_id = self._extract_setting(page_html, "transId")
 
+            _LOGGER.warning("Headless OAuth2: csrf=%s transId=%s", csrf_token is not None, trans_id is not None)
+
             if not csrf_token or not trans_id:
                 _LOGGER.error(
-                    "Could not extract CSRF/transId from login page (url=%s, length=%d)",
+                    "Could not extract CSRF/transId from login page (url=%s, length=%d, first500=%s)",
                     page_url,
                     len(page_html),
+                    page_html[:500],
                 )
                 raise MazdaHeadlessAuthError(
                     "Could not extract CSRF token or transaction ID from login page"
@@ -208,7 +217,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 tenant_path = f"/{oauth_config['tenant_id']}/{oauth_config['policy']}"
 
             # Step 2: POST credentials to SelfAsserted
-            _LOGGER.debug("Headless OAuth2: submitting credentials")
+            _LOGGER.warning("Headless OAuth2: submitting credentials to SelfAsserted")
             self_asserted_url = (
                 f"{base_url}{tenant_path}/SelfAsserted"
                 f"?tx={quote(trans_id, safe='')}"
@@ -238,7 +247,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             resp2_text = await resp2.text()
-            _LOGGER.debug(
+            _LOGGER.warning(
                 "Headless OAuth2: SelfAsserted response status=%s body=%s",
                 resp2.status,
                 resp2_text[:500],
@@ -260,7 +269,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 raise MazdaHeadlessAuthError(error_msg)
 
             # Step 3: GET the confirmed endpoint to get the auth code redirect
-            _LOGGER.debug("Headless OAuth2: requesting confirmed endpoint")
+            _LOGGER.warning("Headless OAuth2: requesting confirmed endpoint")
             confirmed_url = (
                 f"{base_url}{tenant_path}/api/CombinedSigninAndSignup/confirmed"
                 f"?rememberMe=true"
@@ -278,7 +287,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 allow_redirects=False,
             )
 
-            _LOGGER.debug(
+            _LOGGER.warning(
                 "Headless OAuth2: confirmed response status=%s", resp3.status
             )
 
@@ -296,8 +305,8 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
             redirect_location = resp3.headers.get("Location", "")
-            _LOGGER.debug(
-                "Headless OAuth2: redirect location=%s", redirect_location[:100]
+            _LOGGER.warning(
+                "Headless OAuth2: redirect location=%s", redirect_location[:200]
             )
 
             code = self._extract_code_from_url(redirect_location)
@@ -307,7 +316,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
         # Step 4: Exchange code for tokens (outside isolated session)
-        _LOGGER.debug("Headless OAuth2: exchanging code for tokens")
+        _LOGGER.warning("Headless OAuth2: exchanging code for tokens")
         return await self._exchange_code_for_tokens(code)
 
     @staticmethod
