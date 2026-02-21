@@ -43,14 +43,13 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
             region = user_input[CONF_REGION]
 
+            client = MazdaAPI.from_credentials(
+                email=email,
+                password=password,
+                region=region,
+            )
             try:
-                client = MazdaAPI.from_credentials(
-                    email=email,
-                    password=password,
-                    region=region,
-                )
                 await client.validate_credentials()
-                await client.close()
             except MazdaAuthenticationException:
                 errors["base"] = "invalid_auth"
             except MazdaAccountLockedException:
@@ -61,7 +60,10 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 _LOGGER.exception("Unexpected error during Mazda login")
                 errors["base"] = "unknown"
-            else:
+            finally:
+                await client.close()
+
+            if not errors:
                 unique_id = hashlib.sha256(email.lower().encode()).hexdigest()[:16]
                 await self.async_set_unique_id(unique_id)
 

@@ -427,7 +427,18 @@ class Connection:
             ssl=ssl_context,
         )
 
-        encryption_key_response_json = await encryption_key_response.json()
+        if encryption_key_response.status != 200:
+            self.logger.error(
+                "Failed to retrieve encryption key: HTTP %s",
+                encryption_key_response.status,
+            )
+            raise MazdaException(
+                f"Failed to retrieve encryption key: HTTP {encryption_key_response.status}"
+            )
+
+        encryption_key_response_json = await encryption_key_response.json(
+            content_type=None
+        )
 
         public_key = encryption_key_response_json["data"]["publicKey"]
         encrypted_password = self.__encrypt_payload_with_public_key(
@@ -452,7 +463,15 @@ class Connection:
             ssl=ssl_context,
         )
 
-        login_response_json = await login_response.json()
+        if login_response.status != 200:
+            self.logger.error(
+                "Login request failed: HTTP %s", login_response.status
+            )
+            raise MazdaLoginFailedException(
+                f"Login request failed: HTTP {login_response.status}"
+            )
+
+        login_response_json = await login_response.json(content_type=None)
 
         if login_response_json.get("status") == "INVALID_CREDENTIAL":
             self.logger.error("Login failed due to invalid email or password")
