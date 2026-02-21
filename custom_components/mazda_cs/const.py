@@ -22,6 +22,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_SIGNIN",
         "client_id": "2daf581c-65c1-4fdb-b46a-efa98c6ba5b7",
         "scope": "openid offline_access profile https://pduspb2c01.onmicrosoft.com/0728deea-be48-4382-9ef1-d4ff6d679ffa/cv",
+        "ui_locales": "en-US",
     },
     "MME": {
         "auth_base_url": "https://eu.id.mazda.com",
@@ -29,6 +30,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_signin",
         "client_id": "cbfe43e1-6949-42fe-996e-1a56f41a891d",
         "scope": "https://pdeupb2c01.onmicrosoft.com/dcd35c5a-b32f-4add-ac6c-ba6e8bbfa11b/cv openid profile offline_access",
+        "ui_locales": "en-GB",
     },
     "MJO": {
         "auth_base_url": "https://ap.id.mazda.com",
@@ -36,6 +38,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_SIGNIN",
         "client_id": None,
         "scope": None,
+        "ui_locales": "ja",
     },
 }
 

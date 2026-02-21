@@ -133,6 +133,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "state": self._state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
+            "ui_locales": oauth_config.get("ui_locales", "en-US"),
         }
 
         return f"{base_url}?{urlencode(params)}"
