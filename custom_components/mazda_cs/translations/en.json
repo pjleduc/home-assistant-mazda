@@ -20,6 +20,12 @@
                 },
                 "description": "Select your Mazda Connected Services region."
             },
+            "country": {
+                "data": {
+                    "country": "Country"
+                },
+                "description": "Select the country where your MyMazda account is registered."
+            },
             "auth": {
                 "data": {
                     "redirect_url": "Redirect URL"

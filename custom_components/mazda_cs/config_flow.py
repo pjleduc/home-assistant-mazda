@@ -18,12 +18,15 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_ACCESS_TOKEN,
+    CONF_COUNTRY,
     CONF_EXPIRES_AT,
     CONF_REFRESH_TOKEN,
+    COUNTRY_UI_LOCALES,
     DOMAIN,
     MAZDA_REGIONS,
     OAUTH2_REDIRECT_URI,
     OAUTH2_REGION_CONFIG,
+    REGION_COUNTRIES,
     get_authorize_url,
     get_token_url,
     is_oauth2_supported,
@@ -49,6 +52,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Start the mazda config flow."""
         self._reauth_entry: config_entries.ConfigEntry | None = None
         self._region: str | None = None
+        self._country: str | None = None
         self._code_verifier: str | None = None
         self._state: str | None = None
 
@@ -65,7 +69,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "region_not_supported"
             else:
                 self._region = region
-                return await self.async_step_auth()
+                return await self.async_step_country()
 
         return self.async_show_form(
             step_id="user",
@@ -77,6 +81,32 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_country(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step 2: Select country within the chosen region."""
+        countries = REGION_COUNTRIES.get(self._region, {})
+
+        # Skip country selection if only one country in the region
+        if len(countries) == 1:
+            self._country = next(iter(countries))
+            return await self.async_step_auth()
+
+        if user_input is not None:
+            self._country = user_input[CONF_COUNTRY]
+            return await self.async_step_auth()
+
+        return self.async_show_form(
+            step_id="country",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_COUNTRY, default=self._country
+                    ): vol.In(countries),
+                }
+            ),
         )
 
     async def async_step_auth(
@@ -124,6 +154,10 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         oauth_config = OAUTH2_REGION_CONFIG[self._region]
         base_url = get_authorize_url(self._region)
 
+        ui_locale = COUNTRY_UI_LOCALES.get(
+            self._country, oauth_config.get("ui_locales", "en-US")
+        )
+
         params = {
             "client_id": oauth_config["client_id"],
             "response_type": "code",
@@ -133,6 +167,8 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "state": self._state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
+            "ui_locales": ui_locale,
+            "country": self._country,
         }
 
         return f"{base_url}?{urlencode(params)}"
@@ -207,6 +243,7 @@ class MazdaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Create a new config entry or update an existing one."""
         entry_data = {
             CONF_REGION: self._region,
+            CONF_COUNTRY: self._country,
             CONF_ACCESS_TOKEN: tokens[CONF_ACCESS_TOKEN],
             CONF_REFRESH_TOKEN: tokens[CONF_REFRESH_TOKEN],
             CONF_EXPIRES_AT: tokens[CONF_EXPIRES_AT],

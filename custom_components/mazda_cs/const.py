@@ -9,6 +9,57 @@ DATA_VEHICLES = "vehicles"
 
 MAZDA_REGIONS = {"MNAO": "North America", "MME": "Europe", "MJO": "Japan"}
 
+# Country choices per region (B2C requires matching the account's registered country)
+REGION_COUNTRIES = {
+    "MNAO": {"US": "United States", "CA": "Canada"},
+    "MME": {
+        "GB": "United Kingdom",
+        "DE": "Germany",
+        "AT": "Austria",
+        "CH": "Switzerland",
+        "FR": "France",
+        "ES": "Spain",
+        "IT": "Italy",
+        "NL": "Netherlands",
+        "BE": "Belgium",
+        "PT": "Portugal",
+        "PL": "Poland",
+        "CZ": "Czech Republic",
+        "SE": "Sweden",
+        "NO": "Norway",
+        "DK": "Denmark",
+        "FI": "Finland",
+        "IE": "Ireland",
+    },
+    "MJO": {"JP": "Japan"},
+}
+
+# Map country code to ui_locales value for the B2C login page
+COUNTRY_UI_LOCALES = {
+    "US": "en-US",
+    "CA": "en-CA",
+    "GB": "en-GB",
+    "DE": "de-DE",
+    "AT": "de-AT",
+    "CH": "de-CH",
+    "FR": "fr-FR",
+    "ES": "es-ES",
+    "IT": "it-IT",
+    "NL": "nl-NL",
+    "BE": "nl-BE",
+    "PT": "pt-PT",
+    "PL": "pl-PL",
+    "CZ": "cs-CZ",
+    "SE": "sv-SE",
+    "NO": "nb-NO",
+    "DK": "da-DK",
+    "FI": "fi-FI",
+    "IE": "en-IE",
+    "JP": "ja",
+}
+
+CONF_COUNTRY = "country"
+
 # OAuth2 token storage keys
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
@@ -22,6 +73,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_SIGNIN",
         "client_id": "2daf581c-65c1-4fdb-b46a-efa98c6ba5b7",
         "scope": "openid offline_access profile https://pduspb2c01.onmicrosoft.com/0728deea-be48-4382-9ef1-d4ff6d679ffa/cv",
+        "ui_locales": "en-US",
     },
     "MME": {
         "auth_base_url": "https://eu.id.mazda.com",
@@ -29,6 +81,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_signin",
         "client_id": "cbfe43e1-6949-42fe-996e-1a56f41a891d",
         "scope": "https://pdeupb2c01.onmicrosoft.com/dcd35c5a-b32f-4add-ac6c-ba6e8bbfa11b/cv openid profile offline_access",
+        "ui_locales": "en-GB",
     },
     "MJO": {
         "auth_base_url": "https://ap.id.mazda.com",
@@ -36,6 +89,7 @@ OAUTH2_REGION_CONFIG = {
         "policy": "B2C_1A_SIGNIN",
         "client_id": None,
         "scope": None,
+        "ui_locales": "ja",
     },
 }
 
