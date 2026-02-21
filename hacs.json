@@ -1,5 +1,5 @@
 {
-  "name": "mazda_cs",
+  "name": "Mazda Connected Services",
   "render_readme": true,
   "homeassistant": "2024.8.0"
 }
