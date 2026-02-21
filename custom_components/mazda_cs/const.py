@@ -9,6 +9,57 @@ DATA_VEHICLES = "vehicles"
 
 MAZDA_REGIONS = {"MNAO": "North America", "MME": "Europe", "MJO": "Japan"}
 
+# Country choices per region (B2C requires matching the account's registered country)
+REGION_COUNTRIES = {
+    "MNAO": {"US": "United States", "CA": "Canada"},
+    "MME": {
+        "GB": "United Kingdom",
+        "DE": "Germany",
+        "AT": "Austria",
+        "CH": "Switzerland",
+        "FR": "France",
+        "ES": "Spain",
+        "IT": "Italy",
+        "NL": "Netherlands",
+        "BE": "Belgium",
+        "PT": "Portugal",
+        "PL": "Poland",
+        "CZ": "Czech Republic",
+        "SE": "Sweden",
+        "NO": "Norway",
+        "DK": "Denmark",
+        "FI": "Finland",
+        "IE": "Ireland",
+    },
+    "MJO": {"JP": "Japan"},
+}
+
+# Map country code to ui_locales value for the B2C login page
+COUNTRY_UI_LOCALES = {
+    "US": "en-US",
+    "CA": "en-CA",
+    "GB": "en-GB",
+    "DE": "de-DE",
+    "AT": "de-AT",
+    "CH": "de-CH",
+    "FR": "fr-FR",
+    "ES": "es-ES",
+    "IT": "it-IT",
+    "NL": "nl-NL",
+    "BE": "nl-BE",
+    "PT": "pt-PT",
+    "PL": "pl-PL",
+    "CZ": "cs-CZ",
+    "SE": "sv-SE",
+    "NO": "nb-NO",
+    "DK": "da-DK",
+    "FI": "fi-FI",
+    "IE": "en-IE",
+    "JP": "ja",
+}
+
+CONF_COUNTRY = "country"
+
 # OAuth2 token storage keys
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
