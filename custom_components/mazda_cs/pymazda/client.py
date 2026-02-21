@@ -1,24 +1,59 @@
 import datetime  # noqa: D100
 import json
 
+from .connection import Connection
 from .controller import Controller
 from .exceptions import MazdaConfigException
+from .oauth_connection import OAuthConnection
 
 
 class Client:  # noqa: D101
-    def __init__(  # noqa: D107
-        self, email, password, region, websession=None, use_cached_vehicle_list=False
-    ):
-        if email is None or len(email) == 0:
-            raise MazdaConfigException("Invalid or missing email address")
-        if password is None or len(password) == 0:
-            raise MazdaConfigException("Invalid or missing password")
-
-        self.controller = Controller(email, password, region, websession)
+    def __init__(self, connection, use_cached_vehicle_list=False):  # noqa: D107
+        self.controller = Controller(connection)
 
         self._cached_state = {}
         self._use_cached_vehicle_list = use_cached_vehicle_list
         self._cached_vehicle_list = None
+
+    @classmethod
+    def from_credentials(
+        cls,
+        email,
+        password,
+        region,
+        websession=None,
+        use_cached_vehicle_list=False,
+    ):
+        """Create a Client using email/password credentials."""
+        connection = Connection(
+            email=email,
+            password=password,
+            region=region,
+            websession=websession,
+        )
+        return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
+
+    @classmethod
+    def from_oauth_tokens(
+        cls,
+        region,
+        websession,
+        access_token,
+        refresh_token,
+        expires_at,
+        token_update_callback=None,
+        use_cached_vehicle_list=False,
+    ):
+        """Create a Client using OAuth2 tokens."""
+        connection = OAuthConnection(
+            region=region,
+            websession=websession,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            token_update_callback=token_update_callback,
+        )
+        return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
 
     async def validate_credentials(self):  # noqa: D102
         await self.controller.login()
