@@ -74,6 +74,7 @@ class OAuthConnection:
         refresh_token,
         expires_at,
         token_update_callback=None,
+        country=None,
     ):
         """Initialize the OAuth connection."""
         if region not in REGION_CONFIG:
@@ -85,7 +86,13 @@ class OAuthConnection:
         self.app_code_old = region_config["app_code_old"]
         self.remote_services_url = region_config["remote_services_url"]
         self.base_url = region_config["base_url"]
-        self.region_code = region_config["region_code"]
+        # Use the country code (lowercased) as region_code when available,
+        # otherwise fall back to the region config default.
+        # The Mazda API uses this header to match the account's registered country.
+        if country:
+            self.region_code = country.lower()
+        else:
+            self.region_code = region_config["region_code"]
 
         if websession is None:
             self._session = aiohttp.ClientSession()

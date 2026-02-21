@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import (
     CONF_ACCESS_TOKEN,
+    CONF_COUNTRY,
     CONF_EXPIRES_AT,
     CONF_REFRESH_TOKEN,
     DATA_CLIENT,
@@ -89,6 +90,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Mazda Connected Services from a config entry."""
     region = entry.data.get(CONF_REGION, "MNAO")
+    country = entry.data.get(CONF_COUNTRY)
     access_token = entry.data.get(CONF_ACCESS_TOKEN)
     refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
     expires_at = entry.data.get(CONF_EXPIRES_AT)
@@ -118,6 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         expires_at=expires_at,
         token_update_callback=token_update_callback,
         use_cached_vehicle_list=True,
+        country=country,
     )
 
     try:

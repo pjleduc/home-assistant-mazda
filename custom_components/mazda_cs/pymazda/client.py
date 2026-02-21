@@ -43,6 +43,7 @@ class Client:  # noqa: D101
         expires_at,
         token_update_callback=None,
         use_cached_vehicle_list=False,
+        country=None,
     ):
         """Create a Client using OAuth2 tokens."""
         connection = OAuthConnection(
@@ -52,6 +53,7 @@ class Client:  # noqa: D101
             refresh_token=refresh_token,
             expires_at=expires_at,
             token_update_callback=token_update_callback,
+            country=country,
         )
         return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
 
