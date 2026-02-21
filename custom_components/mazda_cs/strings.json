@@ -5,19 +5,26 @@
       "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
     },
     "error": {
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "account_locked": "Your Mazda account is locked. Please try again later or reset your password via the MyMazda app.",
+      "region_not_supported": "OAuth2 login is not yet supported for this region.",
+      "no_auth_code": "No authorization code found in the URL. Please make sure you copied the full redirect URL.",
+      "invalid_state": "Security state mismatch. Please try again.",
+      "oauth_error": "Mazda login returned an error. Please try again.",
+      "token_exchange_failed": "Failed to exchange authorization code for tokens. Please try again.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "step": {
       "user": {
         "data": {
-          "email": "[%key:common::config_flow::data::email%]",
-          "password": "[%key:common::config_flow::data::password%]",
           "region": "Region"
         },
-        "description": "Enter your MyMazda account credentials."
+        "description": "Select your Mazda Connected Services region."
+      },
+      "auth": {
+        "data": {
+          "redirect_url": "Redirect URL"
+        },
+        "description": "1. Open this link in your browser and log in with your MyMazda account:\n\n{authorize_url}\n\n2. After logging in, your browser will try to redirect to an address starting with `msauth://...` — this will fail (that is expected).\n\n3. Copy the **full URL** from your browser's address bar and paste it below."
       }
     }
   },

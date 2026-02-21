@@ -8,6 +8,8 @@ import logging
 import time
 from urllib.parse import urlencode
 
+import aiohttp
+
 from .crypto_utils import (
     decrypt_aes128cbc_buffer_to_str,
     encrypt_aes128cbc_buffer_to_base64_str,
@@ -85,7 +87,12 @@ class OAuthConnection:
         self.base_url = region_config["base_url"]
         self.region_code = region_config["region_code"]
 
-        self._session = websession
+        if websession is None:
+            self._session = aiohttp.ClientSession()
+            self._owns_session = True
+        else:
+            self._session = websession
+            self._owns_session = False
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.expires_at = expires_at
@@ -444,4 +451,6 @@ class OAuthConnection:
         await self.ensure_token_valid()
 
     async def close(self):
-        """No-op since websession is managed externally."""
+        """Close the session if we own it."""
+        if self._owns_session and self._session and not self._session.closed:
+            await self._session.close()

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, CONF_REGION, Platform
+from homeassistant.const import CONF_REGION, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -28,6 +28,9 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
+    CONF_ACCESS_TOKEN,
+    CONF_EXPIRES_AT,
+    CONF_REFRESH_TOKEN,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DATA_REGION,
@@ -64,20 +67,20 @@ async def with_timeout(task, timeout_seconds=30):
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old config entries to the new version."""
-    if config_entry.version == 1:
+    if config_entry.version < 2:
         _LOGGER.info(
-            "Migrating Mazda config entry from version 1 to 2. "
-            "Re-authentication may be required."
+            "Mazda config entry version %s is too old. "
+            "Please re-authenticate via the OAuth2 flow.",
+            config_entry.version,
         )
+        # Old entries used email/password which no longer works.
+        # Force re-auth by keeping the region but clearing credentials.
         new_data = {
-            CONF_EMAIL: config_entry.data.get(CONF_EMAIL, ""),
-            CONF_PASSWORD: config_entry.data.get(CONF_PASSWORD, ""),
             CONF_REGION: config_entry.data.get(CONF_REGION, "MNAO"),
         }
         hass.config_entries.async_update_entry(
             config_entry, data=new_data, version=2
         )
-        _LOGGER.info("Migration to version 2 complete")
         return True
 
     return True
@@ -85,19 +88,35 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Mazda Connected Services from a config entry."""
-    email = entry.data.get(CONF_EMAIL)
-    password = entry.data.get(CONF_PASSWORD)
     region = entry.data.get(CONF_REGION, "MNAO")
+    access_token = entry.data.get(CONF_ACCESS_TOKEN)
+    refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
+    expires_at = entry.data.get(CONF_EXPIRES_AT)
 
-    if not email or not password:
+    if not access_token or not refresh_token:
         raise ConfigEntryAuthFailed(
-            "Credentials missing — please re-authenticate"
+            "OAuth2 tokens missing — please re-authenticate"
         )
 
-    mazda_client = MazdaAPI.from_credentials(
-        email=email,
-        password=password,
+    def token_update_callback(new_access, new_refresh, new_expires_at):
+        """Persist refreshed tokens back to the config entry."""
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_ACCESS_TOKEN: new_access,
+                CONF_REFRESH_TOKEN: new_refresh,
+                CONF_EXPIRES_AT: new_expires_at,
+            },
+        )
+
+    mazda_client = MazdaAPI.from_oauth_tokens(
         region=region,
+        websession=None,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_at=expires_at,
+        token_update_callback=token_update_callback,
         use_cached_vehicle_list=True,
     )
 

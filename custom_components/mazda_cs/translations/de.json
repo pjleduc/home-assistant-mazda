@@ -5,26 +5,33 @@
             "reauth_successful": "Die erneute Authentifizierung war erfolgreich"
         },
         "error": {
-            "invalid_auth": "Ungültige E-Mail-Adresse oder Passwort",
-            "account_locked": "Dein Mazda-Konto ist gesperrt. Bitte versuche es später erneut oder setze dein Passwort über die MyMazda-App zurück.",
+            "region_not_supported": "OAuth2-Anmeldung wird f\u00fcr diese Region noch nicht unterst\u00fctzt.",
+            "no_auth_code": "Kein Autorisierungscode in der URL gefunden. Bitte stelle sicher, dass du die vollst\u00e4ndige Weiterleitungs-URL kopiert hast.",
+            "invalid_state": "Sicherheitsstatus stimmt nicht \u00fcberein. Bitte versuche es erneut.",
+            "oauth_error": "Mazda-Anmeldung hat einen Fehler zur\u00fcckgegeben. Bitte versuche es erneut.",
+            "token_exchange_failed": "Der Austausch des Autorisierungscodes gegen Tokens ist fehlgeschlagen. Bitte versuche es erneut.",
             "cannot_connect": "Verbindungsfehler",
             "unknown": "Unerwarteter Fehler"
         },
         "step": {
             "user": {
                 "data": {
-                    "email": "E-Mail",
-                    "password": "Passwort",
                     "region": "Region"
                 },
-                "description": "Gib deine MyMazda-Zugangsdaten ein."
+                "description": "W\u00e4hle deine Mazda Connected Services Region."
+            },
+            "auth": {
+                "data": {
+                    "redirect_url": "Weiterleitungs-URL"
+                },
+                "description": "1. \u00d6ffne diesen Link in deinem Browser und melde dich mit deinem MyMazda-Konto an:\n\n{authorize_url}\n\n2. Nach der Anmeldung versucht dein Browser, zu einer Adresse weiterzuleiten, die mit `msauth://...` beginnt \u2014 das schl\u00e4gt fehl (das ist erwartet).\n\n3. Kopiere die **vollst\u00e4ndige URL** aus der Adressleiste deines Browsers und f\u00fcge sie unten ein."
             }
         }
     },
     "entity": {
         "binary_sensor": {
             "driver_door": {
-                "name": "Fahrertür"
+                "name": "Fahrert\u00fcr"
             },
             "ev_plugged_in": {
                 "name": "Eingesteckt"
@@ -33,13 +40,13 @@
                 "name": "Motorhaube"
             },
             "passenger_door": {
-                "name": "Beifahrertür"
+                "name": "Beifahrert\u00fcr"
             },
             "rear_left_door": {
-                "name": "Linke Hintertür"
+                "name": "Linke Hintert\u00fcr"
             },
             "rear_right_door": {
-                "name": "Rechte hintertür"
+                "name": "Rechte hintert\u00fcr"
             },
             "trunk": {
                 "name": "Kofferraum"
@@ -74,7 +81,7 @@
         },
         "lock": {
             "lock": {
-                "name": "Schlösser"
+                "name": "Schl\u00f6sser"
             }
         },
         "sensor": {
@@ -100,7 +107,7 @@
                 "name": "Reichweite benzin"
             },
             "fuel_remaining_percentage": {
-                "name": "Tank Füllstand in %"
+                "name": "Tank F\u00fcllstand in %"
             },
             "odometer": {
                 "name": "Kilometerstand"
