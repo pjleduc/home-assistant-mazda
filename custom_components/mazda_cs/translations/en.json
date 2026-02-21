@@ -7,32 +7,17 @@
         "error": {
             "invalid_auth": "Invalid email or password",
             "account_locked": "Your Mazda account is locked. Please try again later or reset your password via the MyMazda app.",
-            "oauth2_not_supported": "OAuth2 is not yet configured for this region.",
-            "missing_redirect_url": "Please paste the redirect URL from the browser.",
-            "invalid_redirect_url": "Could not extract authorization code from the URL. Please make sure you copied the full URL.",
-            "token_exchange_failed": "Failed to exchange authorization code for tokens. The code may have expired — please try again.",
             "cannot_connect": "Failed to connect",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
+                    "email": "Email",
+                    "password": "Password",
                     "region": "Region"
                 },
-                "description": "[BETA TESTING] Select your Mazda Connected Services region."
-            },
-            "credentials": {
-                "data": {
-                    "email": "Email",
-                    "password": "Password"
-                },
-                "description": "[BETA TESTING] Enter your MyMazda account credentials."
-            },
-            "authorize": {
-                "data": {
-                    "redirect_url": "Redirect URL"
-                },
-                "description": "1. Copy this URL and open it in your browser:\n\n{authorize_url}\n\n2. Log in with your MyMazda credentials.\n3. After login, your browser will redirect to a URL starting with msauth:// — the page may show an error. That is expected.\n4. Copy the full URL from your browser address bar and paste it below.\n\nIf the URL above is not visible, check your Home Assistant logs for the login link."
+                "description": "Enter your MyMazda account credentials."
             }
         }
     },
