@@ -5,7 +5,9 @@ import base64
 import hashlib
 import json
 import logging
+import ssl
 import time
+import uuid
 from urllib.parse import urlencode
 
 import aiohttp
@@ -21,9 +23,11 @@ from .exceptions import (
     MazdaException,
     MazdaLoginFailedException,
     MazdaRequestInProgressException,
+    MazdaSessionExpiredException,
     MazdaTokenExpiredException,
 )
 from .sensordata.sensor_data_builder import SensorDataBuilder
+from .ssl_context_configurator.ssl_context_configurator import SSLContextConfigurator
 
 IV = "0102030405060708"
 SIGNATURE_MD5 = "C383D8C4D279B78130AD52DC71D95CAA"
@@ -31,6 +35,31 @@ APP_PACKAGE_ID = "com.interrait.mymazda"
 USER_AGENT_BASE_API = "MyMazda-Android/9.0.8"
 APP_OS = "Android"
 APP_VERSION = "9.0.8"
+
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.load_default_certs()
+ssl_context.set_ciphers(
+    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:"
+    "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:"
+    "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:"
+    "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:"
+    "ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:"
+    "AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA:AES256-SHA"
+)
+
+SSL_SIGNATURE_ALGORITHMS = [
+    "ecdsa_secp256r1_sha256",
+    "rsa_pss_rsae_sha256",
+    "rsa_pkcs1_sha256",
+    "ecdsa_secp384r1_sha384",
+    "rsa_pss_rsae_sha384",
+    "rsa_pkcs1_sha384",
+    "rsa_pss_rsae_sha512",
+    "rsa_pkcs1_sha512",
+    "rsa_pkcs1_sha1",
+]
+with SSLContextConfigurator(ssl_context, libssl_path="libssl.so.3") as ssl_context_configurator:
+    ssl_context_configurator.configure_signature_algorithms(":".join(SSL_SIGNATURE_ALGORITHMS))
 
 # Region config for the new API.
 # Two hosts per region:
@@ -90,6 +119,7 @@ class OAuthConnection:
         expires_at,
         token_update_callback=None,
         country=None,
+        user_id=None,
     ):
         """Initialize the OAuth connection."""
         if region not in REGION_CONFIG:
@@ -123,7 +153,18 @@ class OAuthConnection:
         self.enc_key = None
         self.sign_key = None
 
-        self.base_api_device_id = "D5FC5CA0-FD3B-40DB-9ADF-3F4F22B7D491"
+        # Generate a unique device ID per user to avoid session conflicts (600100).
+        # Falls back to a static UUID if no user identifier is available.
+        if user_id:
+            self.base_api_device_id = hashlib.sha1(user_id.encode()).hexdigest()
+        else:
+            self.base_api_device_id = "D5FC5CA0-FD3B-40DB-9ADF-3F4F22B7D491"
+
+        # Session ID from attach() — sent with subsequent API requests
+        self.device_session_id = None
+
+        # Callback to re-attach when session expires (600100)
+        self.session_refresh_provider = None
 
         self.sensor_data_builder = SensorDataBuilder()
         self.logger = logging.getLogger(__name__)
@@ -313,6 +354,11 @@ class OAuthConnection:
                 "Server reports request was not encrypted properly. "
                 "Retrieving new encryption keys."
             )
+            if "checkVersion" in uri:
+                raise MazdaException(
+                    "checkVersion rejected by server "
+                    "(wrong SIGNATURE_MD5 or app_code)"
+                )
             await self.__retrieve_keys()
             return await self.__api_request_retry(
                 method, uri, query_dict, body_dict,
@@ -323,6 +369,17 @@ class OAuthConnection:
                 "Server reports access token was expired. Refreshing."
             )
             await self._refresh_access_token()
+            return await self.__api_request_retry(
+                method, uri, query_dict, body_dict,
+                needs_keys, needs_auth, num_retries + 1,
+            )
+        except MazdaSessionExpiredException:
+            self.logger.info(
+                "Session conflict (600100). Clearing session and re-attaching."
+            )
+            self.device_session_id = None
+            if self.session_refresh_provider:
+                await self.session_refresh_provider()
             return await self.__api_request_retry(
                 method, uri, query_dict, body_dict,
                 needs_keys, needs_auth, num_retries + 1,
@@ -384,14 +441,17 @@ class OAuthConnection:
             "language": "en",
             "locale": "en-US",
             "region": self.region_code,
-            "req-id": "req_" + timestamp,
+            "req-id": str(uuid.uuid4()).upper(),
             "timestamp": timestamp,
             "Accept": "*/*, application/json",
             "Accept-Charset": "UTF-8",
         }
 
-        if needs_auth:
+        if needs_auth and self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
+
+        if self.device_session_id:
+            headers["X-device-session-id"] = self.device_session_id
 
         if "checkVersion" in uri:
             headers["sign"] = self.__get_sign_from_timestamp(timestamp, app_code)
@@ -413,6 +473,7 @@ class OAuthConnection:
             headers=headers,
             params=encrypted_query_dict if query_dict else None,
             data=encrypted_body_str if encrypted_body_str else None,
+            ssl=ssl_context,
         )
 
         response_json = await response.json()
@@ -432,6 +493,11 @@ class OAuthConnection:
             raise MazdaAPIEncryptionException("Server rejected encrypted request")
         elif response_json.get("errorCode") == 600002:
             raise MazdaTokenExpiredException("Token expired")
+        elif response_json.get("errorCode") == 600100:
+            raise MazdaSessionExpiredException(
+                "Session conflict (600100): "
+                + response_json.get("error", "multiple devices detected")
+            )
         elif (
             response_json.get("errorCode") == 920000
             and response_json.get("extraCode") == "400S01"

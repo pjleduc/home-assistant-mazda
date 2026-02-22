@@ -1,19 +1,35 @@
 import datetime  # noqa: D100
 import json
+import logging
 
 from .connection import Connection
 from .controller import Controller
 from .exceptions import MazdaConfigException
 from .oauth_connection import OAuthConnection
 
+_LOGGER = logging.getLogger(__name__)
+
+# Per-region attach parameters: (locale, country)
+_REGION_ATTACH_PARAMS = {
+    "MNAO": ("en-US", "US"),
+    "MCI": ("en-CA", "CA"),
+    "MME": ("en-GB", "GB"),
+    "MJO": ("ja-JP", "JP"),
+    "MA": ("en-AU", "AU"),
+}
+
 
 class Client:  # noqa: D101
-    def __init__(self, connection, use_cached_vehicle_list=False):  # noqa: D107
+    def __init__(self, connection, region=None, use_cached_vehicle_list=False):  # noqa: D107
         self.controller = Controller(connection)
+        self._region = region
 
         self._cached_state = {}
         self._use_cached_vehicle_list = use_cached_vehicle_list
         self._cached_vehicle_list = None
+
+        # Session ID returned by attach()
+        self._session_id = None
 
     @classmethod
     def from_credentials(
@@ -31,7 +47,7 @@ class Client:  # noqa: D101
             region=region,
             websession=websession,
         )
-        return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
+        return cls(connection, region=region, use_cached_vehicle_list=use_cached_vehicle_list)
 
     @classmethod
     def from_oauth_tokens(
@@ -44,6 +60,7 @@ class Client:  # noqa: D101
         token_update_callback=None,
         use_cached_vehicle_list=False,
         country=None,
+        user_id=None,
     ):
         """Create a Client using OAuth2 tokens."""
         connection = OAuthConnection(
@@ -54,8 +71,40 @@ class Client:  # noqa: D101
             expires_at=expires_at,
             token_update_callback=token_update_callback,
             country=country,
+            user_id=user_id,
         )
-        return cls(connection, use_cached_vehicle_list=use_cached_vehicle_list)
+        client = cls(connection, region=region, use_cached_vehicle_list=use_cached_vehicle_list)
+        # Wire up the session refresh callback so 600100 errors auto-reattach
+        connection.session_refresh_provider = client.attach
+        return client
+
+    async def attach(self):
+        """Register a device session with the Mazda API."""
+        locale, country = _REGION_ATTACH_PARAMS.get(self._region, ("en-US", "US"))
+        try:
+            response = await self.controller.attach(locale, country)
+            if response and response.get("data"):
+                session_id = (
+                    response["data"].get("userinfo", {}).get("sessionId")
+                )
+                if session_id:
+                    self._session_id = session_id
+                    self.controller.connection.device_session_id = session_id
+                    _LOGGER.debug("Attached session: %s", session_id)
+        except Exception:
+            _LOGGER.warning("attach() failed", exc_info=True)
+
+    async def detach(self):
+        """Unregister the device session."""
+        if self._session_id:
+            try:
+                await self.controller.detach(self._session_id)
+                _LOGGER.debug("Detached session: %s", self._session_id)
+            except Exception:
+                _LOGGER.warning("detach() failed", exc_info=True)
+            finally:
+                self._session_id = None
+                self.controller.connection.device_session_id = None
 
     async def validate_credentials(self):  # noqa: D102
         await self.controller.login()

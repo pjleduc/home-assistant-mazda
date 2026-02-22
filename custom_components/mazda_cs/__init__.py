@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import timedelta
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -60,6 +62,20 @@ PLATFORMS = [
 ]
 
 
+def _extract_jwt_sub(access_token: str) -> str | None:
+    """Extract the 'sub' claim from a JWT access token without requiring PyJWT."""
+    try:
+        payload_b64 = access_token.split(".")[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        return payload.get("sub")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def with_timeout(task, timeout_seconds=30):
     """Run an async task with a timeout."""
     async with asyncio.timeout(timeout_seconds):
@@ -112,6 +128,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             },
         )
 
+    # Extract a stable user identifier from the JWT for per-user device ID generation
+    user_id = _extract_jwt_sub(access_token)
+
     mazda_client = MazdaAPI.from_oauth_tokens(
         region=region,
         websession=None,
@@ -121,6 +140,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         token_update_callback=token_update_callback,
         use_cached_vehicle_list=True,
         country=country,
+        user_id=user_id,
     )
 
     try:
@@ -135,6 +155,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ) as ex:
         _LOGGER.error("Error occurred during Mazda login request: %s", ex)
         raise ConfigEntryNotReady from ex
+
+    # Register a device session with the Mazda API
+    try:
+        await mazda_client.attach()
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning("Initial attach() failed (continuing anyway)", exc_info=True)
 
     async def async_handle_service_call(service_call: ServiceCall) -> None:
         """Handle a service call."""
@@ -227,6 +253,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN][entry.entry_id][DATA_VEHICLES] = vehicles
 
             return vehicles
+        except ConfigEntryAuthFailed:
+            raise  # Let HA's coordinator trigger reauthentication
         except MazdaAuthenticationException as ex:
             raise ConfigEntryAuthFailed("Not authenticated with Mazda API") from ex
         except Exception as ex:
@@ -277,6 +305,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "send_poi")
 
     if unload_ok:
+        # Detach the device session so the server knows we're gone
+        client = hass.data[DOMAIN][entry.entry_id].get(DATA_CLIENT)
+        if client:
+            try:
+                await client.detach()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("detach() on unload failed", exc_info=True)
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
