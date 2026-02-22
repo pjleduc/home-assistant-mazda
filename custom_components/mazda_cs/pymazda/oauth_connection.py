@@ -36,6 +36,7 @@ APP_VERSION = "9.0.8"
 # Two hosts per region:
 #   remote_services_url: for remoteServices/* and service/checkVersion (new host)
 #   base_url: for junction/*, content/*, miox/* endpoints (original /prod/ host)
+# App codes sourced from com.interrait.mymazda 9.0.8 APK.
 REGION_CONFIG = {
     "MNAO": {
         "app_code": "498345786246797888995",
@@ -44,19 +45,33 @@ REGION_CONFIG = {
         "base_url": "https://0cxo7m58.mazda.com/prod/",
         "region_code": "us",
     },
+    "MCI": {
+        "app_code": "498345786246797888995",
+        "app_code_old": "202007270941270111799",
+        "remote_services_url": "https://hgs2ivna.mazda.com/",
+        "base_url": "https://0cxo7m58.mazda.com/prod/",
+        "region_code": "ca",
+    },
     "MME": {
-        "app_code": "202008100250281064816",
+        "app_code": "365747628595648782737",
         "app_code_old": "202008100250281064816",
         "remote_services_url": "https://hgs2iveu.mazda.com/",
         "base_url": "https://e9stj7g7.mazda.com/prod/",
         "region_code": "eu",
     },
     "MJO": {
-        "app_code": "202009170613074283422",
+        "app_code": "438849393836584965983",
         "app_code_old": "202009170613074283422",
         "remote_services_url": "https://hgs2ivap.mazda.com/",
         "base_url": "https://wcs9p6wj.mazda.com/prod/",
         "region_code": "jp",
+    },
+    "MA": {
+        "app_code": "438849393836584965983",
+        "app_code_old": "202009170613074283422",
+        "remote_services_url": "https://hgs2ivap.mazda.com/",
+        "base_url": "https://wcs9p6wj.mazda.com/prod/",
+        "region_code": "au",
     },
 }
 
