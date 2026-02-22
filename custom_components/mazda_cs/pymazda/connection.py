@@ -53,12 +53,22 @@ REGION_CONFIG = {
         "base_url": "https://0cxo7m58.mazda.com/prod/",
         "usher_url": "https://ptznwbh8.mazda.com/appapi/v1/",
     },
+    "MCI": {
+        "app_code": "202007270941270111799",
+        "base_url": "https://0cxo7m58.mazda.com/prod/",
+        "usher_url": "https://ptznwbh8.mazda.com/appapi/v1/",
+    },
     "MME": {
         "app_code": "202008100250281064816",
         "base_url": "https://e9stj7g7.mazda.com/prod/",
         "usher_url": "https://rz97suam.mazda.com/appapi/v1/",
     },
     "MJO": {
+        "app_code": "202009170613074283422",
+        "base_url": "https://wcs9p6wj.mazda.com/prod/",
+        "usher_url": "https://c5ulfwxr.mazda.com/appapi/v1/",
+    },
+    "MA": {
         "app_code": "202009170613074283422",
         "base_url": "https://wcs9p6wj.mazda.com/prod/",
         "usher_url": "https://c5ulfwxr.mazda.com/appapi/v1/",

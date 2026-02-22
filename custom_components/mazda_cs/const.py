@@ -7,11 +7,18 @@ DATA_COORDINATOR = "coordinator"
 DATA_REGION = "region"
 DATA_VEHICLES = "vehicles"
 
-MAZDA_REGIONS = {"MNAO": "North America", "MME": "Europe", "MJO": "Japan"}
+MAZDA_REGIONS = {
+    "MNAO": "North America (US)",
+    "MCI": "Canada",
+    "MME": "Europe",
+    "MJO": "Japan",
+    "MA": "Australia",
+}
 
 # Country choices per region (B2C requires matching the account's registered country)
 REGION_COUNTRIES = {
-    "MNAO": {"US": "United States", "CA": "Canada"},
+    "MNAO": {"US": "United States"},
+    "MCI": {"CA": "Canada"},
     "MME": {
         "GB": "United Kingdom",
         "DE": "Germany",
@@ -32,6 +39,7 @@ REGION_COUNTRIES = {
         "IE": "Ireland",
     },
     "MJO": {"JP": "Japan"},
+    "MA": {"AU": "Australia"},
 }
 
 # Map country code to ui_locales value for the B2C login page
@@ -56,6 +64,7 @@ COUNTRY_UI_LOCALES = {
     "FI": "fi-FI",
     "IE": "en-IE",
     "JP": "ja",
+    "AU": "en-AU",
 }
 
 CONF_COUNTRY = "country"
@@ -66,6 +75,7 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_EXPIRES_AT = "expires_at"
 
 # Per-region OAuth2 configuration (Azure AD B2C)
+# Values sourced from assets/res/raw/*_mzal_config.json in com.interrait.mymazda 9.0.8 APK
 OAUTH2_REGION_CONFIG = {
     "MNAO": {
         "auth_base_url": "https://na.id.mazda.com",
@@ -74,6 +84,14 @@ OAUTH2_REGION_CONFIG = {
         "client_id": "2daf581c-65c1-4fdb-b46a-efa98c6ba5b7",
         "scope": "openid offline_access profile https://pduspb2c01.onmicrosoft.com/0728deea-be48-4382-9ef1-d4ff6d679ffa/cv",
         "ui_locales": "en-US",
+    },
+    "MCI": {
+        "auth_base_url": "https://na.id.mazda.com",
+        "tenant_id": "47801034-62d1-49f6-831b-ffdcf04f13fc",
+        "policy": "B2C_1A_SIGNIN",
+        "client_id": "2daf581c-65c1-4fdb-b46a-efa98c6ba5b7",
+        "scope": "openid offline_access profile https://pduspb2c01.onmicrosoft.com/0728deea-be48-4382-9ef1-d4ff6d679ffa/cv",
+        "ui_locales": "en-CA",
     },
     "MME": {
         "auth_base_url": "https://eu.id.mazda.com",
@@ -85,11 +103,19 @@ OAUTH2_REGION_CONFIG = {
     },
     "MJO": {
         "auth_base_url": "https://ap.id.mazda.com",
-        "tenant_id": None,
+        "tenant_id": "87c951ae-e146-410a-aa89-0376a7f23c1b",
         "policy": "B2C_1A_SIGNIN",
-        "client_id": None,
-        "scope": None,
+        "client_id": "455191ae-e98e-4748-8bc6-57a5a570f1c2",
+        "scope": "openid offline_access profile https://pdjppb2c01.onmicrosoft.com/1c6d5f69-fea6-4019-93df-899ae820b0f4/cv",
         "ui_locales": "ja",
+    },
+    "MA": {
+        "auth_base_url": "https://au.id.mazda.com",
+        "tenant_id": "86d3f546-313e-4ee7-b2aa-10a60dff17ca",
+        "policy": "B2C_1A_SIGNIN",
+        "client_id": "b67a5960-6512-4221-a7ff-166e91f8a584",
+        "scope": "openid offline_access profile https://pdaupb2c01.onmicrosoft.com/9899c693-8a85-4d6d-82a4-edd9ba8308f7/cv",
+        "ui_locales": "en-AU",
     },
 }
 
